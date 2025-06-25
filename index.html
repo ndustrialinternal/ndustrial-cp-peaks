@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Nsight Predictions</title>
+  <style id="theme-style">
+    /* We’ll inject the saved theme only after data is visible */
+  </style>
+  <style>
+    /* Spinner & layout */
+    #loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100px;
+      margin-top: 2rem;
+    }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #ccc;
+      border-top: 4px solid #666;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      0%   { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    #output {
+      display: none;
+    }
+    #theme-container {
+      display: none;
+      text-align: center;
+      margin: 2rem 0;
+    }
+
+    /* Base table styling (light-theme default) */
+    table {
+      margin: 1rem auto;
+      width: 90%;
+      border-collapse: collapse;
+      text-align: center;
+      font-size: 0.95rem;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 0.75rem;
+    }
+    th {
+      background: #f5f5f5;
+      color: #111;
+      font-weight: bold;
+    }
+    /* Default light‐theme row colors: white / light gray */
+    tr:nth-child(even) {
+      background: #f9f9f9;
+    }
+    /* odd rows inherit white by default */
+
+    .note {
+      text-align: right;
+      color: #555;
+      margin-right: 5%;
+      font-style: italic;
+    }
+    .error {
+      color: #b00020;
+      margin: 1rem 0;
+    }
+
+    /* Highlight classes (these stay the same) */
+    .mid-prob {
+      background: #fff8b3 !important; /* light yellow */
+      color: #333 !important;
+      font-weight: bold;
+    }
+    .high-prob {
+      background: #ffe0e0 !important; /* light red */
+      color: #a00000 !important;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>AMPERON PEAK PREDICTION VIEWER</h1>
+  <h2>7 DAY ROLLING FORECAST</h2>
+
+  <div id="loading">
+    <div class="spinner"></div>
+  </div>
+  <button
+    id="alerts-button"
+    onclick="window.location.href='https://ndustrialinternal.github.io/cp-peaks/';">
+    Open Current Peaks
+  </button>
+
+  <div id="output"></div>
+
+  <div id="theme-container">
+    <select id="theme-select">
+      <option value="1">Ultra-Minimal (Light)</option>
+      <option value="0">Terminal Green</option>
+      <option value="2">Modern Dark</option>
+    </select>
+  </div>
+
+  <script>
+    const endpoints = [
+      { label: "ERCOT 4CP", path: "ercot_4cp" },
+      { label: "PJM 5CP PLC", path: "pjm_5cp_plc" },
+      { label: "PJM AECO", path: "pjm_5cp_nits", zoneId: "PJM_LZ_AECO" },
+      { label: "PJM AEP", path: "pjm_5cp_nits", zoneId: "PJM_LZ_AEP" },
+      { label: "PJM BGE", path: "pjm_5cp_nits", zoneId: "PJM_LZ_BGE" },
+      { label: "PJM COMED", path: "pjm_5cp_nits", zoneId: "PJM_LZ_COMED" },
+      { label: "PJM DPL", path: "pjm_5cp_nits", zoneId: "PJM_LZ_DPL" },
+      { label: "PJM PECO", path: "pjm_5cp_nits", zoneId: "PJM_LZ_PECO" },
+      { label: "PJM PPL", path: "pjm_5cp_nits", zoneId: "PJM_LZ_PPL" },
+      { label: "PJM PSEG", path: "pjm_5cp_nits", zoneId: "PJM_LZ_PSEG" }
+    ];
+
+    const themes = [
+      /* 0 = Terminal Green */
+      `body {
+         background: #000;
+         color: #33ff66;
+         font-family: 'Courier New', monospace;
+         padding: 2rem;
+         font-size: 1.1rem;
+         line-height: 1.6;
+         text-align: center;
+       }
+       h1, h2 {
+         color: #33ff66;
+       }
+       table {
+         margin: 1rem auto;
+         width: 90%;
+         border-collapse: collapse;
+         text-align: center;
+       }
+       th, td {
+         border: 1px solid #007744;
+         padding: 0.75rem;
+       }
+       th {
+         background: #002b14 ;
+         color: #66ff99 ;
+       }
+       /* Override base CSS so rows never go white in terminal theme */
+       tr:nth-child(odd) {
+         background: #000 ;
+       }
+       tr:nth-child(even) {
+         background: #001a0d ;
+       }
+       .note {
+         text-align: right;
+         margin-top: 0.75rem;
+         color: #88ffbb;
+         margin-right: 5%;
+       }
+       .error {
+         color: #ff6666;
+       }
+       .high-prob {
+         background: #800000 ;
+         color: #fff !important;
+         font-weight: bold;
+         text-shadow: 0 0 4px #f00;
+       }
+       .mid-prob {
+         background: #444400 !important;
+         color: #fff !important;
+         font-weight: bold;
+       }
+       select {
+         background: #000;
+         color: #33ff66;
+         border: 1px solid #33ff66;
+         font-family: 'Courier New', monospace;
+         margin-top: 2rem;
+       }`,
+
+      /* 1 = Ultra-Minimal (light theme) */
+      `body {
+         background: #fff;
+         color: #222;
+         font-family: sans-serif;
+         padding: 2rem;
+         text-align: center;
+       }
+       h1, h2 {
+         color: #111;
+         font-weight: 600;
+       }
+       table {
+         margin: 1rem auto;
+         width: 90%;
+         border-collapse: collapse;
+         text-align: center;
+         font-size: 0.95rem;
+       }
+       th, td {
+         border: 1px solid #ccc;
+         padding: 0.75rem;
+       }
+       th {
+         background: #f5f5f5 ;
+         color: #111 ;
+       }
+       /* Light theme uses the base CSS for alternating rows */
+       tr:nth-child(even) {
+         background: #f9f9f9;
+       }
+       tr:nth-child(odd) {
+         background: #fff ;
+       }
+       .note {
+         text-align: right;
+         color: #555;
+         margin-right: 5%;
+         font-style: italic;
+       }
+       .error {
+         color: #b00020;
+       }
+       .high-prob {
+         background: #ffe0e0 !important;
+         color: #a00000 !important;
+         font-weight: bold;
+       }
+       .mid-prob {
+         background: #fff8b3 !important;
+         color: #333 !important;
+         font-weight: bold;
+       }
+       select {
+         background: #fff;
+         color: #111;
+         border: 1px solid #ccc;
+         font-family: sans-serif;
+         margin-top: 2rem;
+       }`,
+
+      /* 2 = Modern Dark */
+      `body {
+         background: #121212;
+         color: #a0f0a0;
+         font-family: 'Courier New', monospace;
+         padding: 2rem;
+         text-align: center;
+       }
+       h1, h2 {
+         color: #a0f0a0;
+       }
+       table {
+         margin: 1rem auto;
+         width: 90%;
+         border-collapse: collapse;
+         text-align: center;
+       }
+       th, td {
+         border: 1px solid #66aa66;
+         padding: 0.75rem;
+       }
+       th {
+         background: #1e1e1e ;
+         color: #bfffbf ;
+       }
+       /* Override base CSS so rows never go white in modern dark */
+       tr:nth-child(odd) {
+         background: #121212 ;
+       }
+       tr:nth-child(even) {
+         background: #181818 ;
+       }
+       .note {
+         text-align: right;
+         color: #88cc88;
+         margin-right: 5%;
+       }
+       .error {
+         color: #ff5f5f;
+       }
+       .high-prob {
+         background: #aa2e2e !important;
+         color: #fff !important;
+         font-weight: bold;
+       }
+       .mid-prob {
+         background: #666600 !important;
+         color: #fff !important;
+         font-weight: bold;
+       }
+       select {
+         background: #222;
+         color: #a0f0a0;
+         border: 1px solid #66aa66;
+         font-family: 'Courier New', monospace;
+         margin-top: 2rem;
+       }`
+    ];
+
+    const styleTag = document.getElementById('theme-style');
+    const themeSelect = document.getElementById('theme-select');
+    const themeContainer = document.getElementById('theme-container');
+    const loading = document.getElementById('loading');
+    const output = document.getElementById('output');
+
+    // Only remember index; do NOT inject CSS until after data renders
+    const savedThemeIndex = localStorage.getItem('selectedTheme') || "1";
+    themeSelect.value = savedThemeIndex;
+
+    themeSelect.addEventListener('change', e => {
+      const idx = parseInt(e.target.value, 10);
+      styleTag.innerHTML = themes[idx];
+      localStorage.setItem('selectedTheme', idx);
+    });
+
+    // Build a single HTML string for table + note (parsing UTC+0 correctly)
+    function buildTableHtml(data, metadata) {
+      let html = '<table><tr>' +
+                 ['Date','Peak Hour (Hour End, ISO Local Time)','Peak Load (GW)','Probability of Program Peak']
+                   .map(h => `<th>${h}</th>`).join('') +
+                 '</tr>';
+
+      for (const { date, peak_hour, peak_load, prob } of data) {
+        let cls = '';
+        if (prob > 90) {
+          cls = ' class="high-prob"';
+        } else if (prob >= 50) {
+          cls = ' class="mid-prob"';
+        }
+        html += `<tr${cls}>
+                   <td>${date}</td>
+                   <td>${peak_hour}</td>
+                   <td>${peak_load.toFixed(2)}</td>
+                   <td>${prob}</td>
+                 </tr>`;
+      }
+      html += '</table>';
+
+      if (metadata?.prediction_timestamp) {
+        // The timestamp from API is UTC+0 without a 'Z' suffix;
+        // append 'Z' so JS parses it as UTC, then convert to local with zone.
+        const dtUtc = new Date(metadata.prediction_timestamp + 'Z');
+        const localString = dtUtc.toLocaleString(undefined, { timeZoneName: 'short' });
+        html += `<div class="note">Last updated: ${localString}</div>`;
+      }
+      return html;
+    }
+
+    async function loadPredictions() {
+      const fragment = document.createDocumentFragment();
+      const fetchPromises = endpoints.map(async ({ label, path, zoneId }) => {
+        const container = document.createElement('div');
+        container.className = 'zone';
+        container.innerHTML = `<h2>${label}</h2>`;
+
+        let url = `https://cp-backend-4ntg.onrender.com/api/predictions/${path}`;
+        if (zoneId) url += `?zoneId=${zoneId}`;
+
+        try {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error();
+          const { data, metadata } = await res.json();
+          container.innerHTML += buildTableHtml(data, metadata);
+        } catch {
+          container.innerHTML += `<div class="error">Error loading data</div>`;
+        }
+
+        fragment.appendChild(container);
+      });
+
+      await Promise.all(fetchPromises);
+
+      // Single DOM update once all data is ready
+      loading.style.display = 'none';
+      output.appendChild(fragment);
+      output.style.display = 'block';
+
+      // Now apply saved theme and show selector
+      styleTag.innerHTML = themes[parseInt(savedThemeIndex, 10)];
+      themeContainer.style.display = 'block';
+    }
+
+    loadPredictions();
+  </script>
+</body>
+</html>
